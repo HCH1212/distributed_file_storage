@@ -1,0 +1,40 @@
+# 编译生成的可执行文件
+*.exe
+*.o
+*.a
+*.so
+*.dll
+*.obj
+*.lib
+*.bin
+*.out
+*.test
+
+# Go 编译生成的二进制文件，通常位于项目根目录或bin/目录下
+bin/
+pkg/
+
+# IDE/编辑器生成的文件
+# VS Code
+.vscode/
+
+# JetBrains IDEs (GoLand, IntelliJ IDEA)
+.idea/
+*.iml
+.DS_Store
+
+# Go Modules 相关
+go.sum
+vendor/
+
+# 其他临时文件或日志文件
+*.log
+*.tmp
+temp/
+logs/
+
+# GoLand的dlv调试目录
+.dlv/
+
+# 编译缓存
+.gocache/
