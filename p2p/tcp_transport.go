@@ -5,26 +5,30 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 )
 
 // TCPPeer 通过TCP建立的远程节点
 type TCPPeer struct {
-	conn net.Conn
+	net.Conn
 	// outbound == true：表示这个连接是由本地节点主动发起（dial）的（出站连接）
 	// outbound == false：表示这个连接是由本地节点被动接受（accept）的（入站连接）
 	outbound bool // 出站
+
+	Wg *sync.WaitGroup
 }
 
 func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
-	return &TCPPeer{conn: conn, outbound: outbound}
+	return &TCPPeer{
+		Conn:     conn,
+		outbound: outbound,
+		Wg:       &sync.WaitGroup{},
+	}
 }
 
-func (p *TCPPeer) RemoteAddr() net.Addr {
-	return p.conn.RemoteAddr()
-}
-
-func (p *TCPPeer) Close() error {
-	return p.conn.Close()
+func (p *TCPPeer) Send(data []byte) error {
+	_, err := p.Write(data)
+	return err
 }
 
 type TCPTransportOpts struct {
@@ -129,7 +133,11 @@ func (t *TCPTransport) handleConn(conn net.Conn, outBound bool) {
 			continue
 		}
 
-		rpc.From = peer.conn.RemoteAddr()
+		rpc.From = peer.RemoteAddr().String()
+		peer.Wg.Add(1)
+		fmt.Println("waiting till stream is done")
 		t.rpcch <- rpc
+		peer.Wg.Wait()
+		fmt.Println("stream done continuing normal read loop")
 	}
 }

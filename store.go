@@ -112,7 +112,7 @@ func (s *Store) Delete(key string) error {
 	return os.RemoveAll(firstNameWithRoot)
 }
 
-func (s *Store) Write(key string, r io.Reader) error {
+func (s *Store) Write(key string, r io.Reader) (int64, error) {
 	return s.writeStream(key, r)
 }
 
@@ -136,27 +136,31 @@ func (s *Store) readStream(key string) (io.ReadCloser, error) {
 	return os.Open(fullPathWithRoot)
 }
 
-func (s *Store) writeStream(key string, r io.Reader) error {
+func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 	pathKey := s.PathTransformFunc(key)
 	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.Pathname)
 
 	if err := os.MkdirAll(pathNameWithRoot, os.ModePerm); err != nil {
-		return err
+		return 0, err
 	}
 
 	fullPathWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.FullPath())
 
 	f, err := os.Create(fullPathWithRoot)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
+	// io.Copy 会从 io.Reader (r) 中读取数据，并写入 io.Writer (f)
+	// 直到 r 返回 io.EOF 或发生错误
+	// 如果 r 是一个阻塞的I/O源（如网络连接），io.Copy 将会等待数据
+	// 直到所有数据被读取完毕，这可能导致函数长时间阻塞
 	n, err := io.Copy(f, r)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	log.Printf("written (%d) bytes to disk: %s", n, fullPathWithRoot)
 
-	return nil
+	return n, nil
 }
