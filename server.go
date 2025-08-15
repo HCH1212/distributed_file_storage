@@ -139,16 +139,16 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	if err := s.broadcast(&msg); err != nil {
 		return err
 	}
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Millisecond)
 	// 广播实际data
 	for _, peer := range s.peers {
 		peer.Send([]byte{p2p.IncomingStream})
-		n, err := io.Copy(peer, fileBuffer)
+		_, err := io.Copy(peer, fileBuffer)
 		if err != nil {
 			return err
 		}
 
-		fmt.Println("received and written bytes to disk: ", n)
+		//fmt.Println("received and written bytes to disk: ", n)
 	}
 
 	return nil
@@ -182,6 +182,8 @@ func (s *FileServer) loop() {
 			if err := gob.NewDecoder(bytes.NewReader(rpc.Payload)).Decode(&msg); err != nil {
 				log.Println("decoding error: ", err)
 			}
+
+			//fmt.Printf("%+v\n", msg)
 
 			if err := s.handleMessage(rpc.From, &msg); err != nil {
 				log.Println("handle message error: ", err)
@@ -237,14 +239,14 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 		return fmt.Errorf("peer (%s) not found", from)
 	}
 
-	n, err := s.store.Write(msg.Key, io.LimitReader(peer, msg.Size))
+	_, err := s.store.Write(msg.Key, io.LimitReader(peer, msg.Size))
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("written %d bytes to disk\n", n)
+	//fmt.Printf("[%s] written %d bytes to disk\n", s.Transport.Addr(), n)
 
-	peer.(*p2p.TCPPeer).Wg.Done()
+	peer.CloseStream()
 
 	return nil
 }
