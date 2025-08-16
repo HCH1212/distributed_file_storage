@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
@@ -117,23 +116,25 @@ func (s *Store) Write(key string, r io.Reader) (int64, error) {
 }
 
 // Read 读取不直接返回字节切片，而是返回读取器，更加灵活
-func (s *Store) Read(key string) (io.Reader, error) {
-	f, err := s.readStream(key)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	buf := new(bytes.Buffer)
-	io.Copy(buf, f)
-
-	return buf, nil
+func (s *Store) Read(key string) (int64, io.Reader, error) {
+	return s.readStream(key)
 }
 
-func (s *Store) readStream(key string) (io.ReadCloser, error) {
+func (s *Store) readStream(key string) (int64, io.ReadCloser, error) {
 	pathKey := s.PathTransformFunc(key)
 	fullPathWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.FullPath())
-	return os.Open(fullPathWithRoot)
+
+	file, err := os.Open(fullPathWithRoot)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	fi, err := file.Stat()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return fi.Size(), file, nil
 }
 
 func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
@@ -153,7 +154,7 @@ func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 
 	// io.Copy 会从 io.Reader (r) 中读取数据，并写入 io.Writer (f)
 	// 直到 r 返回 io.EOF 或发生错误
-	// 如果 r 是一个阻塞的I/O源（如网络连接），io.Copy 将会等待数据
+	// TODO 如果 r 是一个阻塞的I/O源（如网络连接），io.Copy 将会等待数据
 	// 直到所有数据被读取完毕，这可能导致函数长时间阻塞
 	n, err := io.Copy(f, r)
 	if err != nil {

@@ -31,7 +31,7 @@ func TestStore(t *testing.T) {
 		data := []byte("some jpg bytes")
 
 		// 写入
-		if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
+		if _, err := s.writeStream(key, bytes.NewReader(data)); err != nil {
 			t.Error(err)
 		}
 
@@ -41,7 +41,7 @@ func TestStore(t *testing.T) {
 		}
 
 		// 读取
-		r, err := s.Read(key)
+		_, r, err := s.Read(key)
 		if err != nil {
 			t.Error(err)
 		}
