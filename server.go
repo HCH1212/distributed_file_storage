@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/aes"
 	"distributed_file_storage/p2p"
 	"encoding/binary"
 	"encoding/gob"
@@ -145,7 +146,7 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	msg := Message{
 		Payload: MessageStoreFile{
 			Key:  key,
-			Size: size,
+			Size: size + aes.BlockSize,
 		},
 	}
 	// 广播元数据
