@@ -2,10 +2,9 @@ package p2p
 
 import "net"
 
-// TODO
 // Peer 一个代表远程节点的接口
 type Peer interface {
-	net.Conn           // 直接嵌入conn的接口
+	net.Conn           // TODO 直接嵌入conn的接口
 	Send([]byte) error // 针对节点的发送功能
 	CloseStream()
 }

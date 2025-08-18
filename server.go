@@ -14,6 +14,7 @@ import (
 )
 
 type FileServerOpts struct {
+	EncKey            []byte
 	StorageRoot       string
 	PathTransformFunc PathTransformFunc
 	Transport         p2p.Transport
@@ -41,18 +42,6 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 		quitch:         make(chan struct{}),
 		peers:          make(map[string]p2p.Peer),
 	}
-}
-
-// TODO
-// broadcast 方法利用了 io.MultiWriter 的强大功能，实现了高效的“一写多发”。它避免了写一个循环，然后逐个发送数据给每个对等节点的繁琐过程，使代码更加简洁和优雅
-func (s *FileServer) stream(msg *Message) error {
-	var peers []io.Writer
-	for _, peer := range s.peers {
-		peers = append(peers, peer)
-	}
-
-	mw := io.MultiWriter(peers...)
-	return gob.NewEncoder(mw).Encode(msg)
 }
 
 func (s *FileServer) broadcast(msg *Message) error {
@@ -98,7 +87,7 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 
 	msg := Message{
 		Payload: MessageGetFile{
-			Key: key,
+			Key: hashKey(key),
 		},
 	}
 
@@ -113,7 +102,7 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 		var fileSize int64
 		binary.Read(peer, binary.LittleEndian, &fileSize)
 
-		n, err := s.store.Write(key, io.LimitReader(peer, fileSize))
+		n, err := s.store.writeDecrypt(s.EncKey, key, io.LimitReader(peer, fileSize))
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +134,7 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	// 2. 将文件广播到网络中所有已知节点
 	msg := Message{
 		Payload: MessageStoreFile{
-			Key:  key,
+			Key:  hashKey(key),
 			Size: size + aes.BlockSize,
 		},
 	}
@@ -155,14 +144,16 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	}
 	time.Sleep(5 * time.Millisecond)
 	// 广播实际data
+	var peers []io.Writer
 	for _, peer := range s.peers {
-		peer.Send([]byte{p2p.IncomingStream})
-		_, err := io.Copy(peer, fileBuffer)
-		if err != nil {
-			return err
-		}
-
-		//fmt.Println("received and written bytes to disk: ", n)
+		peers = append(peers, peer)
+	}
+	// TODO broadcast 方法利用了 io.MultiWriter 的强大功能，实现了高效的“一写多发”。它避免了写一个循环，然后逐个发送数据给每个对等节点的繁琐过程，使代码更加简洁和优雅
+	mw := io.MultiWriter(peers...)
+	mw.Write([]byte{p2p.IncomingStream})
+	_, err = copyEncrypt(s.EncKey, fileBuffer, mw)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -196,8 +187,6 @@ func (s *FileServer) loop() {
 			if err := gob.NewDecoder(bytes.NewReader(rpc.Payload)).Decode(&msg); err != nil {
 				log.Println("decoding error: ", err)
 			}
-
-			//fmt.Printf("%+v\n", msg)
 
 			if err := s.handleMessage(rpc.From, &msg); err != nil {
 				log.Println("handle message error: ", err)
@@ -264,8 +253,6 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 	if err != nil {
 		return err
 	}
-
-	//fmt.Printf("[%s] written %d bytes to disk\n", s.Transport.Addr(), n)
 
 	peer.CloseStream()
 

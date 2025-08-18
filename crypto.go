@@ -3,9 +3,16 @@ package main
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/md5"
 	"crypto/rand"
+	"encoding/hex"
 	"io"
 )
+
+func hashKey(key string) string {
+	hasher := md5.Sum([]byte(key))
+	return hex.EncodeToString(hasher[:])
+}
 
 func newEncryptionKey() []byte {
 	keyBuf := make([]byte, 32)
@@ -15,22 +22,10 @@ func newEncryptionKey() []byte {
 	return keyBuf
 }
 
-func copyDecrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return 0, err
-	}
-
-	// 读取 IV
-	iv := make([]byte, aes.BlockSize)
-	if _, err = src.Read(iv); err != nil {
-		return 0, err
-	}
-
+func copyStream(stream cipher.Stream, src io.Reader, dst io.Writer) (int, error) {
 	var (
-		buf    = make([]byte, 32*1024)
-		stream = cipher.NewCTR(block, iv)
-		nw     = block.BlockSize()
+		buf = make([]byte, 32*1024)
+		nw  = aes.BlockSize
 	)
 	for {
 		n, err := src.Read(buf)
@@ -53,6 +48,22 @@ func copyDecrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
 	return nw, nil
 }
 
+func copyDecrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return 0, err
+	}
+
+	// 读取 IV
+	iv := make([]byte, aes.BlockSize)
+	if _, err = src.Read(iv); err != nil {
+		return 0, err
+	}
+
+	stream := cipher.NewCTR(block, iv)
+	return copyStream(stream, src, dst)
+}
+
 func copyEncrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -69,25 +80,6 @@ func copyEncrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
 		return 0, err
 	}
 
-	var (
-		buf    = make([]byte, 32*1024)
-		stream = cipher.NewCTR(block, iv)
-	)
-	for {
-		n, err := src.Read(buf)
-		if n > 0 {
-			stream.XORKeyStream(buf, buf[:n])
-			if _, err = dst.Write(buf[:n]); err != nil {
-				return 0, err
-			}
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-	}
-
-	return 0, nil
+	stream := cipher.NewCTR(block, iv)
+	return copyStream(stream, src, dst)
 }
