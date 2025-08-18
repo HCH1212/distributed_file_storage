@@ -9,6 +9,13 @@ import (
 	"io"
 )
 
+// 公钥
+func generateID() string {
+	buf := make([]byte, 32)
+	io.ReadFull(rand.Reader, buf)
+	return hex.EncodeToString(buf)
+}
+
 func hashKey(key string) string {
 	hasher := md5.Sum([]byte(key))
 	return hex.EncodeToString(hasher[:])
